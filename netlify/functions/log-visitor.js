@@ -3,7 +3,6 @@
 exports.handler = async function (event, context) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  const ipinfoToken = process.env.IPINFO_TOKEN; // Your new token
 
   const headers = {
     "Access-Control-Allow-Origin": "*",
@@ -34,34 +33,35 @@ exports.handler = async function (event, context) {
     if (requestBody.message) {
       messageToSend = requestBody.message;
     } 
-    // ─── SCENARIO B: DEFAULT PAGE LOAD (FULL SECURE TRACKING) ───
+    // ─── SCENARIO B: DEFAULT PAGE LOAD (FULL DETAILS TRACKING) ───
     else {
       if (visitorIp === '127.0.0.1' || visitorIp === '::1' || visitorIp === 'Unknown IP') {
         messageToSend = `🔔 *Visitor Alert*\n🌐 *IP:* ${visitorIp}\n📍 Localhost testing detected.`;
-      } else if (!ipinfoToken) {
-        messageToSend = `⚠️ *Configuration Error*\nMissing IPINFO_TOKEN in Netlify settings.`;
       } else {
         try {
-          // Fetch comprehensive data using your dedicated account token
-          const geoResponse = await fetch(`https://ipinfo.io/${visitorIp}/json?token=${ipinfoToken}`);
+          // Fetch comprehensive data from ipwho.is
+          const geoResponse = await fetch(`https://ipwho.is/${visitorIp}`);
           geoData = await geoResponse.json();
 
-          // Ipinfo combines ISP and Organization into the "org" field (e.g., "AS15169 Google LLC")
-          const city = geoData.city || 'Unknown City';
-          const region = geoData.region || 'Unknown Region';
-          const country = geoData.country || 'Unknown Country';
-          const ispOrg = geoData.org || 'Unknown ISP/Org';
-          const postal = geoData.postal || 'Unknown Zip';
+          if (geoData.success) {
+            const city = geoData.city || 'Unknown City';
+            const region = geoData.region || 'Unknown Region';
+            const country = geoData.country || 'Unknown Country';
+            const isp = geoData.connection?.isp || geoData.isp || 'Unknown ISP';
+            const org = geoData.connection?.org || geoData.org || 'Unknown Org';
 
-          messageToSend = `
+            messageToSend = `
 🔔 *New Secure Visitor Alert*
 🌐 *IP:* ${visitorIp}
-📍 *Location:* ${city}, ${region}, ${country} (${postal})
-🏢 *ISP/Org:* ${ispOrg}
-          `.trim();
-
+📍 *Location:* ${city}, ${region}, ${country}
+🏢 *ISP:* ${isp}
+🏢 *Org:* ${org}
+            `.trim();
+          } else {
+            messageToSend = `🔔 *Visitor Alert*\n🌐 *IP:* ${visitorIp}\n⚠️ Geolocation lookup failed.`;
+          }
         } catch (apiErr) {
-          messageToSend = `🔔 *Visitor Alert*\n🌐 *IP:* ${visitorIp}\n⚠️ Ipinfo API timed out or offline.`;
+          messageToSend = `🔔 *Visitor Alert*\n🌐 *IP:* ${visitorIp}\n⚠️ Geolocation API offline.`;
         }
       }
     }
@@ -79,7 +79,7 @@ exports.handler = async function (event, context) {
       });
     }
 
-    // Return the clean data to your cPanel front-end script
+    // Return ALL requested data cleanly back to your frontend script
     return {
       statusCode: 200,
       headers: headers,
@@ -89,7 +89,8 @@ exports.handler = async function (event, context) {
         city: geoData.city || "Unknown",
         region: geoData.region || "Unknown",
         country: geoData.country || "Unknown",
-        isp: geoData.org || "Unknown"
+        isp: geoData.connection?.isp || "Unknown",
+        org: geoData.connection?.org || "Unknown"
       }),
     };
 

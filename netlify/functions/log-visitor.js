@@ -5,12 +5,11 @@ exports.handler = async function (event, context) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
   const headers = {
-    "Access-Control-Allow-Origin": "*", // Allows your cPanel site to connect safely
+    "Access-Control-Allow-Origin": "*", // Allows all your different domains to connect
     "Access-Control-Allow-Headers": "Content-Type",
     "Content-Type": "application/json"
   };
 
-  // Handle browser CORS preflight requests safely
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers };
   }
@@ -21,7 +20,7 @@ exports.handler = async function (event, context) {
       requestBody = JSON.parse(event.body);
     }
 
-    // 🚀 Read IP and Country directly from Netlify's Edge router headers
+    // Capture Netlify Edge network details
     const visitorIp = event.headers['x-nf-client-connection-ip'] || 
                       event.headers['client-ip'] || 
                       event.headers['x-forwarded-for'] || 
@@ -29,22 +28,30 @@ exports.handler = async function (event, context) {
                       
     const countryCode = event.headers['x-country'] || 'Unknown Country';
 
+    // 🚀 Extract the site name sent by the front-end (Default to 'Unknown Site' if missing)
+    const siteName = requestBody.siteName || 'Generic Static Site';
+
     let messageToSend = "";
 
-    // SCENARIO A: FRONT-END SENT A CUSTOM MESSAGE
+    // SCENARIO A: FRONT-END SENT A CUSTOM MESSAGE (like a form or click alert)
     if (requestBody.message) {
-      messageToSend = requestBody.message;
+      messageToSend = `
+💻 *Alert from:* ${siteName}
+💬 *Message:* ${requestBody.message}
+🌐 *Visitor IP:* ${visitorIp}
+      `.trim();
     } 
     // SCENARIO B: DEFAULT PAGE LOAD (IP & COUNTRY ONLY)
     else {
       messageToSend = `
-🔔 *New Visitor Alert*
+🔔 *New Visitor*
+🏢 *Site:* ${siteName}
 🌐 *IP:* ${visitorIp}
 📍 *Country:* ${countryCode}
       `.trim();
     }
 
-    // Forward the compiled string to Telegram
+    // Send to Telegram
     if (botToken && chatId && messageToSend) {
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
@@ -57,7 +64,6 @@ exports.handler = async function (event, context) {
       });
     }
 
-    // Return the clean data to your cPanel frontend script
     return {
       statusCode: 200,
       headers: headers,

@@ -10,40 +10,44 @@ exports.handler = async function (event, context) {
     "Content-Type": "application/json"
   };
 
-  // Handle browser CORS preflight requests
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers };
   }
 
   try {
-    // Parse the incoming request body if it exists
     let requestBody = {};
     if (event.body) {
       requestBody = JSON.parse(event.body);
     }
 
-    const visitorIp = event.headers['x-nf-client-connection-ip'] || 'Unknown IP';
-    let messageToSend = "";
-    let geoData = {};
+    // Capture the real IP address
+    const visitorIp = event.headers['x-nf-client-connection-ip'] || 
+                      event.headers['client-ip'] || 
+                      event.headers['x-forwarded-for'] || 
+                      'Unknown IP';
 
-    // ─── SCENARIO A: FRONT-END SENT A CUSTOM MESSAGE ───
+    // 🚀 NEW: Extract location directly from Netlify's built-in data headers
+    const city = event.headers['x-city'] || 'Unknown City';
+    const region = event.headers['x-region'] || 'Unknown Region';
+    const country = event.headers['x-country'] || 'Unknown Country';
+
+    let messageToSend = "";
+
+    // SCENARIO A: FRONT-END SENT A CUSTOM MESSAGE
     if (requestBody.message) {
       messageToSend = requestBody.message;
     } 
-    // ─── SCENARIO B: DEFAULT PAGE LOAD (IP TRACKING) ───
+    // SCENARIO B: DEFAULT PAGE LOAD (IP TRACKING)
     else {
-      const geoResponse = await fetch(`https://ipapi.co/${visitorIp}/json/`);
-      geoData = await geoResponse.json();
-
       messageToSend = `
 🔔 *New Secure Visitor Alert*
 🌐 *IP:* ${visitorIp}
-📍 *Location:* ${geoData.city || 'Unknown'}, ${geoData.region || 'Unknown'}, ${geoData.country_name || 'Unknown'}
-🏢 *ISP:* ${geoData.org || 'Unknown'}
+📍 *Location:* ${city}, ${region}, ${country}
+🏢 *Network:* Detected via Netlify Edge
       `.trim();
     }
 
-    // Send whichever message was generated to Telegram
+    // Send to Telegram
     if (botToken && chatId) {
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
@@ -56,15 +60,15 @@ exports.handler = async function (event, context) {
       });
     }
 
-    // Always return the IP data back to the front-end just in case you need it
+    // Return the data cleanly back to your frontend script
     return {
       statusCode: 200,
       headers: headers,
       body: JSON.stringify({
         status: "Success",
         ip: visitorIp,
-        city: geoData.city || null,
-        country: geoData.country_name || null
+        city: city,
+        country: country
       }),
     };
 

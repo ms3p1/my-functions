@@ -7,11 +7,16 @@ exports.handler = async function (event, context) {
     const headers = {
         "Access-Control-Allow-Origin": "*", // Allows all your different domains to connect
         "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Content-Type": "application/json"
     };
 
     if (event.httpMethod === "OPTIONS") {
-        return { statusCode: 200, headers };
+        return { 
+            statusCode: 200, 
+            headers,
+            body: "" 
+        };
     }
 
     try {
